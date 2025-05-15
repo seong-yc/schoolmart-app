@@ -42,7 +42,7 @@ if submit:
                     title_tag = soup.find("title")
                     product_name = title_tag.text.strip() if title_tag else ""
 
-                # 가격
+                # 가격 (필수 아님)
                 price_tag = soup.select_one(".price-now")
                 if price_tag:
                     price_text = price_tag.text.strip()
@@ -85,11 +85,10 @@ if submit:
                             src = 'https://www.domeggook.com' + src
                         detail_image_urls.append(src)
 
-                # 필수 정보 없으면 건너뜀
-                if not (product_name and price_text and image_url):
+                # 상품명, 이미지 없으면 제외
+                if not (product_name and image_url):
                     st.warning(f"⚠️ 필수 정보 누락 → 제외됨: {url}")
                     st.write("상품명:", product_name)
-                    st.write("가격:", price_text)
                     st.write("이미지:", image_url)
                     continue
 
