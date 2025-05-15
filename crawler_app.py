@@ -8,7 +8,7 @@ except ModuleNotFoundError:
 
 import pandas as pd
 import os
-import urllib.request
+import requests
 from datetime import datetime
 
 st.title("📦 도매꾹 상품 크롤링 → 학교장터 등록 템플릿 자동 생성기")
@@ -26,13 +26,11 @@ submit = st.button("🚀 수집 시작")
 if submit:
     urls = [url.strip() for url in urls_input.strip().split('\n') if url.strip() != '']
 
-    # 예시용 수집 결과 리스트
     collected = []
     image_folder = "images"
     os.makedirs(image_folder, exist_ok=True)
 
     for i, url in enumerate(urls):
-        # 실제 크롤링 로직 대신 예시 데이터 삽입 (Selenium 등을 연동해 실제 수집 가능)
         fake_title = f"도매꾹 상품 {i+1}"
         fake_spec = "1000x500x750mm"
         fake_price = 50000 + i * 1000
@@ -40,9 +38,17 @@ if submit:
         fake_image_url = "https://via.placeholder.com/300x200.png?text=Product+Image"
         fake_image_name = f"product_{i+1}.jpg"
 
-        # 이미지 다운로드
         image_path = os.path.join(image_folder, fake_image_name)
-        urllib.request.urlretrieve(fake_image_url, image_path)
+
+        try:
+            response = requests.get(fake_image_url, timeout=5)
+            if response.status_code == 200:
+                with open(image_path, "wb") as f:
+                    f.write(response.content)
+            else:
+                st.warning(f"⚠️ 이미지 다운로드 실패 ({response.status_code}) - {fake_image_url}")
+        except Exception as e:
+            st.warning(f"⚠️ 이미지 저장 오류: {e}")
 
         collected.append({
             "상품명": fake_title,
@@ -58,12 +64,14 @@ if submit:
             "비고": "자동 수집된 상품"
         })
 
-    # DataFrame 생성 및 엑셀 저장
     df = pd.DataFrame(collected)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_filename = f"학교장터_상품등록_{timestamp}.xlsx"
     df.to_excel(output_filename, index=False)
 
     st.success(f"총 {len(df)}개의 상품을 수집했습니다!")
-    st.download_button("📥 엑셀 다운로드", data=open(output_filename, "rb"), file_name=output_filename)
+    with open(output_filename, "rb") as f:
+        st.download_button("📥 엑셀 다운로드", data=f, file_name=output_filename)
+
     st.markdown(f"🖼 이미지 파일은 `{image_folder}/` 폴더에 저장되었습니다.")
+    
