@@ -9,15 +9,16 @@ except ModuleNotFoundError:
 import pandas as pd
 import os
 import requests
+import zipfile
 from datetime import datetime
 
-st.title("📦 도매꾹 상품 크롤링 → 학교장터 등록 템플릿 자동 생성기")
+st.title("📦 온라인 상품 URL → 학교장터 템플릿 자동 생성기")
 
 st.markdown("""
-이 앱은 도매꾹 상품 URL을 입력하면:
+이 앱은 온라인 상품 URL(도매꾹 포함)을 입력하면:
 1. 상품 정보를 자동 수집하고
 2. 학교장터 템플릿 형식의 엑셀 파일을 만들고
-3. 이미지도 자동 저장해줍니다 ✅
+3. 이미지도 자동 저장하고 ZIP 파일로 다운로드할 수 있습니다 ✅
 """)
 
 urls_input = st.text_area("상품 URL 목록 (줄마다 하나씩 입력해주세요)")
@@ -31,11 +32,11 @@ if submit:
     os.makedirs(image_folder, exist_ok=True)
 
     for i, url in enumerate(urls):
-        fake_title = f"도매꾹 상품 {i+1}"
+        fake_title = f"온라인 상품 {i+1}"
         fake_spec = "1000x500x750mm"
         fake_price = 50000 + i * 1000
         fake_desc = "이 상품은 고급 자재로 만들어졌으며 학교 납품에 적합합니다."
-        fake_image_url = "https://via.placeholder.com/300x200.png?text=Product+Image"
+        fake_image_url = f"https://picsum.photos/seed/{i}/300/200"
         fake_image_name = f"product_{i+1}.jpg"
 
         image_path = os.path.join(image_folder, fake_image_name)
@@ -59,7 +60,7 @@ if submit:
             "이미지파일명": fake_image_name,
             "납품가능지역": "전국",
             "모델명": f"MDL{i+1}",
-            "제조사": "도매꾹공급업체",
+            "제조사": "공급업체",
             "재고수량": 100,
             "비고": "자동 수집된 상품"
         })
@@ -69,9 +70,19 @@ if submit:
     output_filename = f"학교장터_상품등록_{timestamp}.xlsx"
     df.to_excel(output_filename, index=False)
 
+    # 이미지 ZIP 파일 생성
+    zip_filename = f"images_{timestamp}.zip"
+    with zipfile.ZipFile(zip_filename, "w") as zipf:
+        for file in os.listdir(image_folder):
+            file_path = os.path.join(image_folder, file)
+            zipf.write(file_path, arcname=file)
+
     st.success(f"총 {len(df)}개의 상품을 수집했습니다!")
+
     with open(output_filename, "rb") as f:
         st.download_button("📥 엑셀 다운로드", data=f, file_name=output_filename)
 
-    st.markdown(f"🖼 이미지 파일은 `{image_folder}/` 폴더에 저장되었습니다.")
-    
+    with open(zip_filename, "rb") as f:
+        st.download_button("🖼 이미지 ZIP 다운로드", data=f, file_name=zip_filename)
+
+    st.markdown(f"📁 이미지와 엑셀 파일이 준비되었습니다.")
