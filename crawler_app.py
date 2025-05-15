@@ -1,115 +1,149 @@
-# NOTE: This script requires Streamlit to run.
-# To install: pip install streamlit beautifulsoup4
-
-try:
-    import streamlit as st
-except ModuleNotFoundError:
-    raise ModuleNotFoundError("'streamlit' 모듈이 설치되어 있지 않습니다. 아래 명령어로 설치해주세요:\n\npip install streamlit")
-
+import streamlit as st
 import pandas as pd
 import os
 import requests
 import zipfile
 from datetime import datetime
 from bs4 import BeautifulSoup
+from PIL import Image
+from io import BytesIO
 
-st.title("📦 온라인 상품 URL → 학교장터 템플릿 자동 생성기")
+output_dir = "outputs"
+image_folder = os.path.join(output_dir, "images")
+os.makedirs(image_folder, exist_ok=True)
+
+st.title("🏫 도매꾹 상품 → 학교장터 엑셀 자동 변환기")
 
 st.markdown("""
-이 앱은 온라인 상품 URL(도매꾹 포함)을 입력하면:
-1. 상품 정보를 자동 수집하고
-2. 학교장터 템플릿 형식의 엑셀 파일을 만들고
-3. 이미지도 자동 저장하고 ZIP 파일로 다운로드할 수 있습니다 ✅
+도매꾹 상품 URL을 입력하면:
+- 상품 정보를 정밀하게 수집하고
+- 대표 + 상세 이미지 저장
+- 학교장터 양식 엑셀 파일과 이미지 ZIP을 생성합니다.
 """)
 
-urls_input = st.text_area("상품 URL 목록 (줄마다 하나씩 입력해주세요)")
-submit = st.button("🚀 수집 시작")
+urls_input = st.text_area("🔗 도매꾹 상품 URL 입력 (줄마다 하나)", height=200)
+submit = st.button("🚀 상품 정보 수집 및 변환")
 
 if submit:
-    urls = [url.strip() for url in urls_input.strip().split('\n') if url.strip() != '']
-
+    urls = [u.strip() for u in urls_input.strip().split('\n') if u.strip()]
     collected = []
-    image_folder = "images"
-    os.makedirs(image_folder, exist_ok=True)
 
-    headers = {"User-Agent": "Mozilla/5.0"}
-
-    for i, url in enumerate(urls):
-        # 기본값 설정
-        product_name = f"온라인 상품 {i+1}"
-        price_text = 50000 + i * 1000
-        desc = "이 상품은 고급 자재로 만들어졌으며 학교 납품에 적합합니다."
-        image_url = f"https://picsum.photos/seed/{i}/300/200"
-
-        # 도매꾹 상품이면 실제 정보 크롤링 시도
-        if "domeggook.com" in url:
+    with st.spinner("상품 정보를 수집 중입니다..."):
+        for i, url in enumerate(urls):
             try:
-                res = requests.get(url, headers=headers, timeout=10)
+                res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                 soup = BeautifulSoup(res.text, "html.parser")
 
-                # 상품명
                 title_tag = soup.select_one("meta[property='og:title']") or soup.find("title")
-                if title_tag:
-                    product_name = title_tag['content'].strip() if title_tag.has_attr('content') else title_tag.text.strip()
+                product_name = title_tag['content'].strip() if title_tag and title_tag.has_attr('content') else title_tag.text.strip()
 
-                # 이미지 URL
-                image_meta = soup.select_one("meta[property='og:image']")
-                if image_meta and image_meta.has_attr('content'):
-                    image_url = image_meta['content']
+                image_tag = soup.select_one("meta[property='og:image']")
+                image_url = image_tag['content'] if image_tag and image_tag.has_attr('content') else None
 
-                # 가격 (일부 페이지는 노출 안될 수 있음)
                 price_tag = soup.select_one(".price-now")
-                if price_tag:
-                    price_text = price_tag.text.strip()
+                price_text = price_tag.text.strip() if price_tag else ""
+
+                desc_tag = soup.select_one(".product-detail")
+                desc = desc_tag.get_text(strip=True) if desc_tag else ""
+
+                # ✅ 카테고리 자동 추출
+                category_tags = soup.select(".location a")
+                categories = [tag.get_text(strip=True) for tag in category_tags[1:]]  # '홈' 제외
+                category1 = categories[0] if len(categories) > 0 else ""
+                category2 = categories[1] if len(categories) > 1 else ""
+                category3 = categories[2] if len(categories) > 2 else ""
+
+                detail_imgs = soup.select("#tabContents img") or soup.select(".product-detail img")
+                detail_image_urls = []
+                for img in detail_imgs:
+                    if img.has_attr('src'):
+                        src = img['src']
+                        if src.startswith('//'):
+                            src = 'https:' + src
+                        elif src.startswith('/'):
+                            src = 'https://www.domeggook.com' + src
+                        detail_image_urls.append(src)
+
+                if not (product_name and price_text and image_url):
+                    st.warning(f"⚠️ 필수 정보 누락 → 제외됨: {url}")
+                    continue
+
+                safe_name = product_name.replace(" ", "_").replace("/", "_")
+                image_name = f"{safe_name}_main.jpg"
+                image_path = os.path.join(image_folder, image_name)
+
+                try:
+                    img_data = requests.get(image_url, timeout=5).content
+                    with open(image_path, "wb") as f:
+                        f.write(img_data)
+                except:
+                    st.warning(f"⚠️ 대표 이미지 저장 실패: {image_url}")
+
+                detail_image_names = []
+                for j, detail_url in enumerate(detail_image_urls):
+                    try:
+                        response = requests.get(detail_url, timeout=5)
+                        if response.status_code == 200:
+                            detail_name = f"{safe_name}_detail_{j+1}.jpg"
+                            detail_path = os.path.join(image_folder, detail_name)
+                            with open(detail_path, "wb") as f:
+                                f.write(response.content)
+                            detail_image_names.append(detail_name)
+                    except:
+                        pass
+
+                st.subheader(f"📦 {product_name}")
+                try:
+                    image_preview = Image.open(BytesIO(img_data))
+                    st.image(image_preview, caption="대표 이미지", width=200)
+                except:
+                    st.text("(대표 이미지 미리보기 실패)")
+
+                collected.append({
+                    "결과": category1 or "기타",
+                    "카테고리1": category1,
+                    "카테고리2": category2,
+                    "카테고리3": category3,
+                    "물품명": product_name,
+                    "규격": "",
+                    "모델명": "",
+                    "제조번호": "",
+                    "제조사": "",
+                    "제조국": "",
+                    "소재/재질": "",
+                    "최소주문수량": "",
+                    "판매단위": "개",
+                    "보증기간": "",
+                    "납품 가능기한": "",
+                    "배송비종류": "",
+                    "배송비": "",
+                    "타품 배송비": "",
+                    "배송유예": "",
+                    "제주배송여부": "",
+                    "제주추가배송비": "",
+                    "제주추가배송여부": "",
+                    "상품상세설명": desc,
+                    "대표이미지1": image_name,
+                    "상세이미지": ";".join(detail_image_names)
+                })
 
             except Exception as e:
-                st.warning(f"⚠️ 도매꾹 정보 수집 실패: {e}")
+                st.error(f"❌ 수집 실패: {url} → {e}")
 
-        image_name = f"product_{i+1}.jpg"
-        image_path = os.path.join(image_folder, image_name)
+    if collected:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        excel_path = os.path.join(output_dir, f"학교장터_상품등록_{timestamp}.xlsx")
+        zip_path = os.path.join(output_dir, f"images_{timestamp}.zip")
 
-        try:
-            response = requests.get(image_url, timeout=5)
-            if response.status_code == 200:
-                with open(image_path, "wb") as f:
-                    f.write(response.content)
-            else:
-                st.warning(f"⚠️ 이미지 다운로드 실패 ({response.status_code}) - {image_url}")
-        except Exception as e:
-            st.warning(f"⚠️ 이미지 저장 오류: {e}")
+        df = pd.DataFrame(collected)
+        df.to_excel(excel_path, index=False)
 
-        collected.append({
-            "상품명": product_name,
-            "카테고리": "학교비품 > 기타",
-            "규격": "1000x500x750mm",
-            "단가": price_text,
-            "상세설명": desc,
-            "이미지파일명": image_name,
-            "납품가능지역": "전국",
-            "모델명": f"MDL{i+1}",
-            "제조사": "공급업체",
-            "재고수량": 100,
-            "비고": "자동 수집된 상품"
-        })
+        with zipfile.ZipFile(zip_path, "w") as zipf:
+            for file in os.listdir(image_folder):
+                zipf.write(os.path.join(image_folder, file), arcname=file)
 
-    df = pd.DataFrame(collected)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_filename = f"학교장터_상품등록_{timestamp}.xlsx"
-    df.to_excel(output_filename, index=False)
-
-    # 이미지 ZIP 파일 생성
-    zip_filename = f"images_{timestamp}.zip"
-    with zipfile.ZipFile(zip_filename, "w") as zipf:
-        for file in os.listdir(image_folder):
-            file_path = os.path.join(image_folder, file)
-            zipf.write(file_path, arcname=file)
-
-    st.success(f"총 {len(df)}개의 상품을 수집했습니다!")
-
-    with open(output_filename, "rb") as f:
-        st.download_button("📥 엑셀 다운로드", data=f, file_name=output_filename)
-
-    with open(zip_filename, "rb") as f:
-        st.download_button("🖼 이미지 ZIP 다운로드", data=f, file_name=zip_filename)
-
-    st.markdown(f"📁 이미지와 엑셀 파일이 준비되었습니다.")
+        st.success(f"✅ 총 {len(df)}개 상품 정리 완료!")
+        with open(excel_path, "rb") as f:
+            st.download_button("📥 엑셀 다운로드", data=f, file_name=os.path.basename(excel_path))
+        with open(zip_path, "rb") as f:
+            st.download_button("🖼 이미지 ZIP 다운로드", data=f, file_name=os.path.basename(zip_path))
