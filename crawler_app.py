@@ -48,7 +48,11 @@ if submit:
                     price_text = price_tag.text.strip()
                 else:
                     price_tag = soup.select_one(".product-price")
-                    price_text = price_tag.text.strip() if price_tag else ""
+                    if price_tag:
+                        price_text = price_tag.text.strip()
+                    else:
+                        price_tag = soup.select_one(".price")
+                        price_text = price_tag.text.strip() if price_tag else ""
 
                 # 대표 이미지
                 image_tag = soup.select_one("meta[property='og:image']")
@@ -84,6 +88,9 @@ if submit:
                 # 필수 정보 없으면 건너뜀
                 if not (product_name and price_text and image_url):
                     st.warning(f"⚠️ 필수 정보 누락 → 제외됨: {url}")
+                    st.write("상품명:", product_name)
+                    st.write("가격:", price_text)
+                    st.write("이미지:", image_url)
                     continue
 
                 safe_name = product_name.replace(" ", "_").replace("/", "_")
