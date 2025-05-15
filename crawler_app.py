@@ -1,5 +1,5 @@
 # NOTE: This script requires Streamlit to run.
-# To install: pip install streamlit
+# To install: pip install streamlit beautifulsoup4
 
 try:
     import streamlit as st
@@ -11,6 +11,7 @@ import os
 import requests
 import zipfile
 from datetime import datetime
+from bs4 import BeautifulSoup
 
 st.title("📦 온라인 상품 URL → 학교장터 템플릿 자동 생성기")
 
@@ -31,33 +32,59 @@ if submit:
     image_folder = "images"
     os.makedirs(image_folder, exist_ok=True)
 
-    for i, url in enumerate(urls):
-        fake_title = f"온라인 상품 {i+1}"
-        fake_spec = "1000x500x750mm"
-        fake_price = 50000 + i * 1000
-        fake_desc = "이 상품은 고급 자재로 만들어졌으며 학교 납품에 적합합니다."
-        fake_image_url = f"https://picsum.photos/seed/{i}/300/200"
-        fake_image_name = f"product_{i+1}.jpg"
+    headers = {"User-Agent": "Mozilla/5.0"}
 
-        image_path = os.path.join(image_folder, fake_image_name)
+    for i, url in enumerate(urls):
+        # 기본값 설정
+        product_name = f"온라인 상품 {i+1}"
+        price_text = 50000 + i * 1000
+        desc = "이 상품은 고급 자재로 만들어졌으며 학교 납품에 적합합니다."
+        image_url = f"https://picsum.photos/seed/{i}/300/200"
+
+        # 도매꾹 상품이면 실제 정보 크롤링 시도
+        if "domeggook.com" in url:
+            try:
+                res = requests.get(url, headers=headers, timeout=10)
+                soup = BeautifulSoup(res.text, "html.parser")
+
+                # 상품명
+                title_tag = soup.select_one("meta[property='og:title']") or soup.find("title")
+                if title_tag:
+                    product_name = title_tag['content'].strip() if title_tag.has_attr('content') else title_tag.text.strip()
+
+                # 이미지 URL
+                image_meta = soup.select_one("meta[property='og:image']")
+                if image_meta and image_meta.has_attr('content'):
+                    image_url = image_meta['content']
+
+                # 가격 (일부 페이지는 노출 안될 수 있음)
+                price_tag = soup.select_one(".price-now")
+                if price_tag:
+                    price_text = price_tag.text.strip()
+
+            except Exception as e:
+                st.warning(f"⚠️ 도매꾹 정보 수집 실패: {e}")
+
+        image_name = f"product_{i+1}.jpg"
+        image_path = os.path.join(image_folder, image_name)
 
         try:
-            response = requests.get(fake_image_url, timeout=5)
+            response = requests.get(image_url, timeout=5)
             if response.status_code == 200:
                 with open(image_path, "wb") as f:
                     f.write(response.content)
             else:
-                st.warning(f"⚠️ 이미지 다운로드 실패 ({response.status_code}) - {fake_image_url}")
+                st.warning(f"⚠️ 이미지 다운로드 실패 ({response.status_code}) - {image_url}")
         except Exception as e:
             st.warning(f"⚠️ 이미지 저장 오류: {e}")
 
         collected.append({
-            "상품명": fake_title,
+            "상품명": product_name,
             "카테고리": "학교비품 > 기타",
-            "규격": fake_spec,
-            "단가": fake_price,
-            "상세설명": fake_desc,
-            "이미지파일명": fake_image_name,
+            "규격": "1000x500x750mm",
+            "단가": price_text,
+            "상세설명": desc,
+            "이미지파일명": image_name,
             "납품가능지역": "전국",
             "모델명": f"MDL{i+1}",
             "제조사": "공급업체",
