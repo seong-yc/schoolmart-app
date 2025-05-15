@@ -34,25 +34,42 @@ if submit:
                 res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                 soup = BeautifulSoup(res.text, "html.parser")
 
-                title_tag = soup.select_one("meta[property='og:title']") or soup.find("title")
-                product_name = title_tag['content'].strip() if title_tag and title_tag.has_attr('content') else title_tag.text.strip()
+                # 상품명
+                title_tag = soup.select_one("meta[property='og:title']")
+                if title_tag and title_tag.get('content'):
+                    product_name = title_tag['content'].strip()
+                else:
+                    title_tag = soup.find("title")
+                    product_name = title_tag.text.strip() if title_tag else ""
 
-                image_tag = soup.select_one("meta[property='og:image']")
-                image_url = image_tag['content'] if image_tag and image_tag.has_attr('content') else None
-
+                # 가격
                 price_tag = soup.select_one(".price-now")
-                price_text = price_tag.text.strip() if price_tag else ""
+                if price_tag:
+                    price_text = price_tag.text.strip()
+                else:
+                    price_tag = soup.select_one(".product-price")
+                    price_text = price_tag.text.strip() if price_tag else ""
 
+                # 대표 이미지
+                image_tag = soup.select_one("meta[property='og:image']")
+                if image_tag and image_tag.get('content'):
+                    image_url = image_tag['content']
+                else:
+                    image_tag = soup.select_one(".product-image img")
+                    image_url = image_tag['src'] if image_tag and image_tag.get('src') else ""
+
+                # 설명
                 desc_tag = soup.select_one(".product-detail")
                 desc = desc_tag.get_text(strip=True) if desc_tag else ""
 
-                # ✅ 카테고리 자동 추출
+                # 카테고리
                 category_tags = soup.select(".location a")
-                categories = [tag.get_text(strip=True) for tag in category_tags[1:]]  # '홈' 제외
+                categories = [tag.get_text(strip=True) for tag in category_tags[1:]]
                 category1 = categories[0] if len(categories) > 0 else ""
                 category2 = categories[1] if len(categories) > 1 else ""
                 category3 = categories[2] if len(categories) > 2 else ""
 
+                # 상세 이미지
                 detail_imgs = soup.select("#tabContents img") or soup.select(".product-detail img")
                 detail_image_urls = []
                 for img in detail_imgs:
@@ -64,6 +81,7 @@ if submit:
                             src = 'https://www.domeggook.com' + src
                         detail_image_urls.append(src)
 
+                # 필수 정보 없으면 건너뜀
                 if not (product_name and price_text and image_url):
                     st.warning(f"⚠️ 필수 정보 누락 → 제외됨: {url}")
                     continue
@@ -92,6 +110,7 @@ if submit:
                     except:
                         pass
 
+                # 미리보기
                 st.subheader(f"📦 {product_name}")
                 try:
                     image_preview = Image.open(BytesIO(img_data))
