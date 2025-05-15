@@ -66,6 +66,22 @@ if submit:
                 desc_tag = soup.select_one(".product-detail")
                 desc = desc_tag.get_text(strip=True) if desc_tag else ""
 
+                # 추가 정보 (제조사, 제조국 등)
+                maker_tag = soup.select_one("td.maker")
+                maker = maker_tag.get_text(strip=True) if maker_tag else ""
+
+                origin_tag = soup.select_one("td.origin")
+                origin = origin_tag.get_text(strip=True) if origin_tag else ""
+
+                model_tag = soup.select_one("td.model")
+                model = model_tag.get_text(strip=True) if model_tag else ""
+
+                material_tag = soup.select_one("td.material")
+                material = material_tag.get_text(strip=True) if material_tag else ""
+
+                min_order_tag = soup.select_one("td.min-order")
+                min_order = min_order_tag.get_text(strip=True) if min_order_tag else ""
+
                 # 카테고리
                 category_tags = soup.select(".location a")
                 categories = [tag.get_text(strip=True) for tag in category_tags[1:]]
@@ -88,8 +104,6 @@ if submit:
                 # 상품명, 이미지 없으면 제외
                 if not (product_name and image_url):
                     st.warning(f"⚠️ 필수 정보 누락 → 제외됨: {url}")
-                    st.write("상품명:", product_name)
-                    st.write("이미지:", image_url)
                     continue
 
                 safe_name = product_name.replace(" ", "_").replace("/", "_")
@@ -131,12 +145,12 @@ if submit:
                     "카테고리3": category3,
                     "물품명": product_name,
                     "규격": "",
-                    "모델명": "",
+                    "모델명": model,
                     "제조번호": "",
-                    "제조사": "",
-                    "제조국": "",
-                    "소재/재질": "",
-                    "최소주문수량": "",
+                    "제조사": maker,
+                    "제조국": origin,
+                    "소재/재질": material,
+                    "최소주문수량": min_order,
                     "판매단위": "개",
                     "보증기간": "",
                     "납품 가능기한": "",
